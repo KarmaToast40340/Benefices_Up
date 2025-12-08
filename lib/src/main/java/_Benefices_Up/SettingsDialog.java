@@ -18,7 +18,6 @@ public class SettingsDialog extends JDialog {
     private final List<SavoirFaire> savoirFaireTypes;
     private final List<PointType> pointTypes;
 
-    // pour éviter de sauvegarder pendant l'initialisation des modèles
     private boolean loading = false;
 
     public SettingsDialog(JFrame owner,
@@ -37,13 +36,13 @@ public class SettingsDialog extends JDialog {
 
         JTabbedPane tabs = new JTabbedPane();
 
-        // Onglet Savoir-faire
+        // ===== Onglet Savoir-faire (ajout / suppression / édition nom + poids) =====
         JPanel sfPanel = new JPanel(new BorderLayout());
         sfModel = new DefaultTableModel(new String[]{"Nom", "Poids"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                // Nom non éditable, poids éditable
-                return column == 1;
+                // nom et poids éditables
+                return true;
             }
 
             @Override
@@ -56,15 +55,22 @@ public class SettingsDialog extends JDialog {
         }
         JTable sfTable = new JTable(sfModel);
         sfPanel.add(new JScrollPane(sfTable), BorderLayout.CENTER);
+
+        JPanel sfButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton addSfBtn = new JButton("Ajouter un savoir-faire");
+        JButton removeSfBtn = new JButton("Supprimer le savoir-faire sélectionné");
+        sfButtons.add(addSfBtn);
+        sfButtons.add(removeSfBtn);
+        sfPanel.add(sfButtons, BorderLayout.SOUTH);
+
         tabs.addTab("Savoir-faire", sfPanel);
 
-        // Onglet Types de points
+        // ===== Onglet Types de points (ajout / suppression / édition nom + poids) =====
         JPanel ptPanel = new JPanel(new BorderLayout());
         pointsTypeModel = new DefaultTableModel(new String[]{"Type de point", "Poids"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                // Nom non éditable, poids éditable
-                return column == 1;
+                return true;
             }
 
             @Override
@@ -77,9 +83,17 @@ public class SettingsDialog extends JDialog {
         }
         JTable ptTable = new JTable(pointsTypeModel);
         ptPanel.add(new JScrollPane(ptTable), BorderLayout.CENTER);
+
+        JPanel ptButtons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JButton addPtBtn = new JButton("Ajouter un type");
+        JButton removePtBtn = new JButton("Supprimer le type sélectionné");
+        ptButtons.add(addPtBtn);
+        ptButtons.add(removePtBtn);
+        ptPanel.add(ptButtons, BorderLayout.SOUTH);
+
         tabs.addTab("Part variable", ptPanel);
 
-        // Bouton fermer (les sauvegardes se font automatiquement)
+        // ===== Bas de fenêtre : bouton Fermer =====
         JButton closeButton = new JButton("Fermer");
         closeButton.addActionListener(e -> dispose());
 
@@ -90,59 +104,123 @@ public class SettingsDialog extends JDialog {
         getContentPane().add(tabs, BorderLayout.CENTER);
         getContentPane().add(bottom, BorderLayout.SOUTH);
 
-        // === Sauvegarde automatique sur modification des poids ===
+        // === Actions sur Savoir-faire ===
+        addSfBtn.addActionListener(e -> {
+            sfModel.addRow(new Object[]{"Nouveau savoir-faire", 0.0});
+            applyChanges();
+        });
+
+        removeSfBtn.addActionListener(e -> {
+            int row = sfTable.getSelectedRow();
+            if (row >= 0) {
+                sfModel.removeRow(row);
+                applyChanges();
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Sélectionnez un savoir-faire à supprimer.",
+                        "Info", JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+
+        // === Actions sur Types de points ===
+        addPtBtn.addActionListener(e -> {
+            pointsTypeModel.addRow(new Object[]{"Nouveau type", 1.0});
+            applyChanges();
+        });
+
+        removePtBtn.addActionListener(e -> {
+            int row = ptTable.getSelectedRow();
+            if (row >= 0) {
+                pointsTypeModel.removeRow(row);
+                applyChanges();
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Sélectionnez un type de point à supprimer.",
+                        "Info", JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+
+        // === Sauvegarde auto sur modification de cellule ===
         TableModelListener sfListener = (TableModelEvent e) -> {
             if (loading) return;
             if (e.getType() != TableModelEvent.UPDATE) return;
-            int col = e.getColumn();
-            if (col != 1) return; // on ne s'intéresse qu'à la colonne Poids
-            if (!applyChanges()) {
-                // en cas d'erreur, on ne ferme pas, on laisse le message d'erreur d'applyChanges
-            }
+            applyChanges();
         };
         sfModel.addTableModelListener(sfListener);
 
         TableModelListener ptListener = (TableModelEvent e) -> {
             if (loading) return;
             if (e.getType() != TableModelEvent.UPDATE) return;
-            int col = e.getColumn();
-            if (col != 1) return;
-            if (!applyChanges()) {
-                // idem
-            }
+            applyChanges();
         };
         pointsTypeModel.addTableModelListener(ptListener);
 
         loading = false;
     }
 
-    private boolean applyChanges() {
-        // 1) Mettre à jour les poids des savoir-faire
-        for (int i = 0; i < savoirFaireTypes.size(); i++) {
-            Object val = sfModel.getValueAt(i, 1);
-            try {
-                double poids = Double.parseDouble(val.toString());
-                savoirFaireTypes.get(i).setPoids(poids);
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this,
-                        "Poids invalide pour le savoir-faire " + savoirFaireTypes.get(i).getNom(),
-                        "Erreur", JOptionPane.ERROR_MESSAGE);
-                return false;
+    private void stopTableEditing() {
+        for (Window w : Window.getWindows()) {
+            if (w.isFocused()) {
+                for (Component c : w.getComponents()) {
+                    if (c instanceof JTable) {
+                        JTable t = (JTable) c;
+                        if (t.isEditing()) {
+                            t.getCellEditor().stopCellEditing();
+                        }
+                    }
+                }
             }
         }
+    }
 
-        // 2) Mettre à jour les poids des types de points
-        for (int i = 0; i < pointTypes.size(); i++) {
-            Object val = pointsTypeModel.getValueAt(i, 1);
-            try {
-                double poids = Double.parseDouble(val.toString());
-                pointTypes.get(i).setPoids(poids);
-            } catch (Exception ex) {
+    private boolean applyChanges() {
+        stopTableEditing();
+        // 1) Re-synchroniser complètement savoirFaireTypes à partir du modèle
+        savoirFaireTypes.clear();
+        for (int row = 0; row < sfModel.getRowCount(); row++) {
+            Object nomObj = sfModel.getValueAt(row, 0);
+            Object poidsObj = sfModel.getValueAt(row, 1);
+            String nom = nomObj == null ? "" : nomObj.toString().trim();
+            if (nom.isEmpty()) {
                 JOptionPane.showMessageDialog(this,
-                        "Poids invalide pour le type de point " + pointTypes.get(i).getNom(),
+                        "Le nom d'un savoir-faire ne peut pas être vide (ligne " + (row + 1) + ").",
                         "Erreur", JOptionPane.ERROR_MESSAGE);
                 return false;
             }
+            double poids;
+            try {
+                poids = Double.parseDouble(poidsObj.toString());
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this,
+                        "Poids invalide pour le savoir-faire \"" + nom + "\" (ligne " + (row + 1) + ").",
+                        "Erreur", JOptionPane.ERROR_MESSAGE);
+                return false;
+            }
+            savoirFaireTypes.add(new SavoirFaire(nom, poids));
+        }
+
+        // 2) Re-synchroniser complètement pointTypes à partir du modèle
+        pointTypes.clear();
+        for (int row = 0; row < pointsTypeModel.getRowCount(); row++) {
+            Object nomObj = pointsTypeModel.getValueAt(row, 0);
+            Object poidsObj = pointsTypeModel.getValueAt(row, 1);
+            String nom = nomObj == null ? "" : nomObj.toString().trim();
+            if (nom.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                        "Le nom d'un type de point ne peut pas être vide (ligne " + (row + 1) + ").",
+                        "Erreur", JOptionPane.ERROR_MESSAGE);
+                return false;
+            }
+            double poids;
+            try {
+                poids = Double.parseDouble(poidsObj.toString());
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this,
+                        "Poids invalide pour le type de point \"" + nom + "\" (ligne " + (row + 1) + ").",
+                        "Erreur", JOptionPane.ERROR_MESSAGE);
+                return false;
+            }
+            pointTypes.add(new PointType(nom, poids));
         }
 
         // 3) Sauvegarder les paramètres

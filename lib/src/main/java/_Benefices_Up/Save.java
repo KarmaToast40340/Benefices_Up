@@ -97,46 +97,40 @@ public class Save {
     }
 
     public static void loadParams(List<SavoirFaire> sfTypes, List<PointType> pointTypes) throws IOException {
-        File f = new File(PARAMS_FILE);
-        System.out.println("Lecture params depuis : " + f.getAbsolutePath());
-        if (!f.exists()) {
-            System.out.println("params.csv n'existe pas encore, on garde les valeurs par défaut.");
-            return;
-        }
+    File f = new File(PARAMS_FILE);
+    System.out.println("Lecture params depuis : " + f.getAbsolutePath());
+    if (!f.exists()) {
+        System.out.println("params.csv n'existe pas encore, on garde les valeurs par défaut.");
+        return;
+    }
 
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(new FileInputStream(f), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String[] parts = line.split(";");
-                if (parts.length < 1) continue;
+    sfTypes.clear();
+    pointTypes.clear();
 
-                if ("SF".equals(parts[0])) {
-                    // SF;nom;poids;nom;poids;...
-                    for (int i = 1; i + 1 < parts.length; i += 2) {
-                        String nom = parts[i];
-                        double poids = Double.parseDouble(parts[i + 1]);
-                        for (SavoirFaire sf : sfTypes) {
-                            if (sf.getNom().equals(nom)) {
-                                sf.setPoids(poids);
-                                break;
-                            }
-                        }
-                    }
-                } else if ("PT".equals(parts[0])) {
-                    // PT;nom;poids;nom;poids;...
-                    for (int i = 1; i + 1 < parts.length; i += 2) {
-                        String nom = parts[i];
-                        double poids = Double.parseDouble(parts[i + 1]);
-                        for (PointType pt : pointTypes) {
-                            if (pt.getNom().equals(nom)) {
-                                pt.setPoids(poids);
-                                break;
-                            }
-                        }
-                    }
+    try (BufferedReader reader = new BufferedReader(
+            new InputStreamReader(new FileInputStream(f), StandardCharsets.UTF_8))) {
+        String line;
+        while ((line = reader.readLine()) != null) {
+            String[] parts = line.split(";");
+            if (parts.length < 1) continue;
+
+            if ("SF".equals(parts[0])) {
+                // SF;nom;poids;nom;poids;...
+                for (int i = 1; i + 1 < parts.length; i += 2) {
+                    String nom = parts[i];
+                    double poids = Double.parseDouble(parts[i + 1]);
+                    sfTypes.add(new SavoirFaire(nom, poids));
+                }
+            } else if ("PT".equals(parts[0])) {
+                // PT;nom;poids;nom;poids;...
+                for (int i = 1; i + 1 < parts.length; i += 2) {
+                    String nom = parts[i];
+                    double poids = Double.parseDouble(parts[i + 1]);
+                    pointTypes.add(new PointType(nom, poids));
                 }
             }
         }
     }
+}
+
 }
