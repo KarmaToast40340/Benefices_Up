@@ -38,7 +38,7 @@ public class SettingsDialog extends JDialog {
 
         // ===== Onglet Savoir-faire (ajout / suppression / édition nom + poids) =====
         JPanel sfPanel = new JPanel(new BorderLayout());
-        sfModel = new DefaultTableModel(new String[]{"Nom", "Poids"}, 0) {
+        sfModel = new DefaultTableModel(new String[]{"Nom", "Partage des 20%"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 // nom et poids éditables

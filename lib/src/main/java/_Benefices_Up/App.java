@@ -158,7 +158,7 @@ public class App extends JFrame {
         centerPanel.add(variableScroll);
         centerPanel.add(sfScroll);
 
-        // ==== Bas : bénéfice total + bouton calcul + résultats ====
+        // ==== Bas : bénéfice total + boutons + résultats ====
         JPanel bottomPanel = new JPanel(new BorderLayout());
 
         JPanel totalPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -167,10 +167,15 @@ public class App extends JFrame {
         totalPanel.add(totalProfitField);
 
         JButton computeButton = new JButton("Calculer les bénéfices par Asso");
+        JButton exportButton = new JButton("Enregistrer partage des bénéfices");
+
+        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        buttonsPanel.add(computeButton);
+        buttonsPanel.add(exportButton);
 
         JPanel bottomTop = new JPanel(new BorderLayout());
         bottomTop.add(totalPanel, BorderLayout.NORTH);
-        bottomTop.add(computeButton, BorderLayout.SOUTH);
+        bottomTop.add(buttonsPanel, BorderLayout.SOUTH);
 
         resultArea = new JTextArea(10, 60);
         resultArea.setEditable(false);
@@ -213,6 +218,7 @@ public class App extends JFrame {
         });
 
         computeButton.addActionListener(e -> computeBenefits());
+        exportButton.addActionListener(e -> exportCsv());
 
         settingsButton.addActionListener(e -> {
             SettingsDialog dialog = new SettingsDialog(
@@ -616,6 +622,183 @@ public class App extends JFrame {
         resultArea.setText(sb.toString());
         saveAll();
     }
+
+    // === Export CSV ===
+
+    private void exportCsv() {
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Enregistrer le partage des bénéfices");
+    chooser.setSelectedFile(new File("partage_benefices.csv"));
+    int res = chooser.showSaveDialog(this);
+    if (res != JFileChooser.APPROVE_OPTION) return;
+
+    File file = chooser.getSelectedFile();
+    if (!file.getName().toLowerCase().endsWith(".csv")) {
+        file = new File(file.getAbsolutePath() + ".csv");
+    }
+
+    try (BufferedWriter w = new BufferedWriter(
+            new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
+
+        int assoCount = assoModel.getRowCount();
+
+        String totalText = totalProfitField.getText().trim().replace(',', '.');
+        if (totalText.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "Veuillez saisir le bénéfice total avant d'exporter.",
+                    "Erreur", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        double totalProfit = Double.parseDouble(totalText);
+
+        // === Recalcul des bénéfices (comme dans computeBenefits) ===
+        List<Association> associations = new ArrayList<>();
+        for (int a = 0; a < assoCount; a++) {
+            String name = assoModel.getValueAt(a, 0).toString();
+            associations.add(new Association(name, 0.0, 0.0));
+        }
+
+        int typeCount = variableModel.getRowCount();
+        double[][] rawPoints = new double[typeCount][assoCount];
+        for (int t = 0; t < typeCount; t++) {
+            for (int a = 0; a < assoCount; a++) {
+                String assoName = assoModel.getValueAt(a, 0).toString();
+                int colIndex = findVariableColumnForAsso(assoName);
+                if (colIndex < 0) continue;
+                Object v = variableModel.getValueAt(t, colIndex);
+                if (v != null && !v.toString().isEmpty()) {
+                    try {
+                        rawPoints[t][a] = Double.parseDouble(v.toString().replace(',', '.'));
+                    } catch (NumberFormatException ignored) {
+                        rawPoints[t][a] = 0.0;
+                    }
+                }
+            }
+        }
+
+        int sfCount = savoirFaireTypes.size();
+        boolean[][] sfSelected = new boolean[sfCount][assoCount];
+        for (int a = 0; a < assoCount; a++) {
+            String name = assoModel.getValueAt(a, 0).toString();
+            int row = findSfRowForName(name);
+            if (row < 0) continue;
+            for (int i = 0; i < sfCount; i++) {
+                Object v = sfModel.getValueAt(row, i + 1);
+                sfSelected[i][a] = (v instanceof Boolean) && (Boolean) v;
+            }
+        }
+
+        BenefitCalculator calculator = new BenefitCalculator();
+        calculator.computeBenefits(
+                totalProfit,
+                associations,
+                pointTypes,
+                rawPoints,
+                savoirFaireTypes,
+                sfSelected
+        );
+
+        // === 1) Montants par association ===
+        w.write("Association;Part fixe;Part variable;Part savoir-faire;Total");
+        w.newLine();
+        for (Association asso : associations) {
+            w.write(asso.getName());
+            w.write(";");
+            w.write(String.valueOf(asso.getPartFixe()));
+            w.write(";");
+            w.write(String.valueOf(asso.getPartVariable()));
+            w.write(";");
+            w.write(String.valueOf(asso.getPartSavoirFaire()));
+            w.write(";");
+            w.write(String.valueOf(asso.getTotal()));
+            w.newLine();
+        }
+
+        w.newLine();
+
+        // === 2) Points bruts (variableModel) ===
+        w.write("Points bruts");
+        w.newLine();
+        w.write("Type de point");
+        for (int a = 0; a < assoCount; a++) {
+            String assoName = assoModel.getValueAt(a, 0).toString();
+            w.write(";");
+            w.write(assoName);
+        }
+        w.newLine();
+        for (int r = 0; r < variableModel.getRowCount(); r++) {
+            Object typeName = variableModel.getValueAt(r, 0);
+            w.write(typeName == null ? "" : typeName.toString());
+            for (int c = 1; c < variableModel.getColumnCount(); c++) {
+                w.write(";");
+                Object v = variableModel.getValueAt(r, c);
+                w.write(v == null ? "" : v.toString());
+            }
+            w.newLine();
+        }
+
+        w.newLine();
+
+        // === 3) Savoir-faire cochés (sfModel) ===
+        w.write("Savoir-faire");
+        w.newLine();
+        for (int c = 0; c < sfModel.getColumnCount(); c++) {
+            if (c > 0) w.write(";");
+            Object colName = sfModel.getColumnName(c);
+            w.write(colName == null ? "" : colName.toString());
+        }
+        w.newLine();
+        for (int r = 0; r < sfModel.getRowCount(); r++) {
+            for (int c = 0; c < sfModel.getColumnCount(); c++) {
+                if (c > 0) w.write(";");
+                Object v = sfModel.getValueAt(r, c);
+                if (v instanceof Boolean) {
+                    w.write(((Boolean) v) ? "true" : "false");
+                } else {
+                    w.write(v == null ? "" : v.toString());
+                }
+            }
+            w.newLine();
+        }
+
+        w.newLine();
+
+        // === 4) Paramètres (équivalent de params.csv) ===
+        w.write("Paramètres");
+        w.newLine();
+
+        // Savoir-faire : nom;poids;...
+        w.write("SF");
+        for (SavoirFaire sf : savoirFaireTypes) {
+            w.write(";");
+            w.write(sf.getNom());
+            w.write(";");
+            w.write(String.valueOf(sf.getPoids()));
+        }
+        w.newLine();
+
+        // Types de points : nom;poids;...
+        w.write("PT");
+        for (PointType pt : pointTypes) {
+            w.write(";");
+            w.write(pt.getNom());
+            w.write(";");
+            w.write(String.valueOf(pt.getPoids()));
+        }
+        w.newLine();
+
+        JOptionPane.showMessageDialog(this,
+                "Fichier CSV exporté : " + file.getAbsolutePath(),
+                "Export OK", JOptionPane.INFORMATION_MESSAGE);
+
+    } catch (IOException | NumberFormatException ex) {
+        ex.printStackTrace();
+        JOptionPane.showMessageDialog(this,
+                "Erreur lors de l'export CSV : " + ex.getMessage(),
+                "Erreur", JOptionPane.ERROR_MESSAGE);
+    }
+}
+
 
     private int findVariableColumnForAsso(String name) {
         int colCount = variableModel.getColumnCount();
