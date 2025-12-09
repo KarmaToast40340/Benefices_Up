@@ -15,6 +15,8 @@ application {
     mainClass.set("_Benefices_Up.App")
 }
 
+// Tu peux garder la toolchain (pour compiler) ou l'enlever.
+// Ici on la garde en Java 21 :
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))
@@ -29,7 +31,11 @@ launch4j {
     mainClassName = "_Benefices_Up.App"
     outfile = "Benefices_Up.exe"
     productName = "Benefices Up"
-    // Version minimale de Java requise
+
+    // JDK embarqué : dossier "jdk" à côté de l'exe
+    bundledJrePath = "jdk"
+
+    // Optionnel : version minimale
     jreMinVersion = "21"
-    // NE PAS mettre bundledJrePath/bundledJre64Bit avec cette version du plugin
 }
+
