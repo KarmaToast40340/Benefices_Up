@@ -31,11 +31,11 @@ launch4j {
     mainClassName = "_Benefices_Up.App"
     outfile = "Benefices_Up.exe"
     productName = "Benefices Up"
-
-    // JDK embarqué : dossier "jdk" à côté de l'exe
     bundledJrePath = "jdk"
-
-    // Optionnel : version minimale
     jreMinVersion = "21"
+
+    // Icône de l'exécutable
+    icon = "${projectDir}/lib/Up_logo.ico"
 }
+
 
